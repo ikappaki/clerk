@@ -39,6 +39,8 @@
   (clerk/show! "notebooks/viewers/markdown.clj")
   (clerk/show! "notebooks/viewers/html.clj")
 
+  (clerk/show! "notebooks/website.clj")
+
   (clerk/clear-cache!)
 
   )
