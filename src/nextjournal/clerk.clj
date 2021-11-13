@@ -80,8 +80,8 @@
         cas-hash (when (fs/exists? digest-file)
                    (slurp digest-file))
         cached? (boolean (and cas-hash (-> cas-hash ->cache-file fs/exists?)))]
-    (when (not (:hash info))
-      (throw (ex-info "hash missing" {:code-string code-string :code->info code->info})))
+    (when (and (not no-cache?) (not (:hash info)))
+      (throw (ex-info "hash missing" info)))
     #_(prn :cached? (cond no-cache? :no-cache
                           cached? true
                           (fs/exists? digest-file) :no-cas-file
@@ -198,13 +198,13 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; public viewer api
-(def md             v/md)
-(def plotly         v/plotly)
-(def vl             v/vl)
-(def tex            v/tex)
-(def notebook       v/notebook)
-(def html           v/html)
-(def code           v/code)
+(def md             #'v/md)
+(def plotly         #'v/plotly)
+(def vl             #'v/vl)
+(def tex            #'v/tex)
+(def notebook       #'v/notebook)
+(def html           #'v/html)
+(def code           #'v/code)
 (def table          #'v/table)
 (def use-headers    #'v/use-headers)
 

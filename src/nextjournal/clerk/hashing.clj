@@ -40,7 +40,7 @@
 (defn var-dependencies [form]
   (let [var-name (var-name form)]
     (->> form
-         (tree-seq sequential? seq)
+         (tree-seq (some-fn sequential? set? map?) seq)
          (keep #(when (and (symbol? %)
                            (not= var-name %))
                   (resolve %)))
@@ -48,12 +48,16 @@
 
 #_(var-dependencies '(def nextjournal.clerk.hashing/foo
                        (fn* ([s] (clojure.string/includes? (rewrite-clj.parser/parse-string-all s) "hi")))))
+#_(do (intern *ns* 'foo)
+      (var-dependencies #{'nextjournal.clerk.hashing/foo}))
 
 (defn analyze [form]
   (let [analyzed-form (-> form
                           ana/analyze
                           (ana.passes.ef/emit-form #{:hygenic :qualified-symbols}))
-        var (some-> analyzed-form var-name resolve)
+        var (when-let [var-name (var-name var-name)]
+              (or (resolve var-name)
+                  (intern (create-ns (symbol (namespace var-name))) (symbol (name var-name)))))
         deps (cond-> (var-dependencies analyzed-form) var (disj var))]
     (cond-> {:form form
              :analyzed-form analyzed-form
@@ -62,6 +66,9 @@
       (seq deps) (assoc :deps deps))))
 
 #_(analyze '(let [x 2] x))
+#_(analyze '(def b :a))
+#_(analyze #{'b})
+#_(analyze '(range b))
 #_(analyze '(defn foo [s] (str/includes? (p/parse-string-all s) "hi")))
 #_(analyze '(defn segments [s] (let [segments (str/split s)]
                                  (str/join segments))))
@@ -69,6 +76,7 @@
 #_(analyze '(in-ns 'user))
 #_(analyze '(do (ns foo)))
 #_(analyze '(def my-inc inc))
+#_(analyze '(defonce !watcher (atom nil)))
 
 (defn remove-leading-semicolons [s]
   (str/replace s #"^[;]+" ""))
@@ -130,6 +138,7 @@
                        {:as info :keys [var deps form ns-effect?]} (analyze form)]
                    (when ns-effect?
                      (eval form))
+
                    (cond-> (assoc-in acc [:var->info (if var var form)] (assoc info :file file :code text))
                      (seq deps)
                      (#(reduce (fn [{:as acc :keys [graph]} dep]
@@ -154,14 +163,6 @@
 #_(analyze-file {:markdown? true} {:graph (dep/graph)} "notebooks/rule_30.clj")
 #_(analyze-file {:graph (dep/graph)} "notebooks/recursive.clj")
 #_(analyze-file {:graph (dep/graph)} "notebooks/hello.clj")
-
-(defn unhashed-deps [var->info]
-  (set/difference (into #{}
-                        (mapcat :deps)
-                        (vals var->info))
-                  (-> var->info keys set)))
-
-#_(unhashed-deps {#'elements/fix-case {:deps #{#'rewrite-clj.node/tag}}})
 
 ;; TODO: handle cljc files
 (defn ns->file [ns]
@@ -220,6 +221,14 @@
 
 #_(hash-jar (find-location #'dep/depend))
 
+(defn unhashed-deps [var->info]
+  (set/difference (into #{}
+                        (mapcat :deps)
+                        (vals var->info))
+                  (-> var->info keys set)))
+
+#_(unhashed-deps {#'elements/fix-case {:deps #{#'rewrite-clj.node/tag}}})
+
 (defn build-graph
   "Analyzes the forms in the given file and builds a dependency graph of the vars.
 
@@ -254,15 +263,23 @@
                                (assoc var->hash var (hash var->hash (assoc info :var var)))
                                var->hash))
                            {}
-                           (dep/topo-sort graph))]
+                           (let [d (set/difference (into #{} (filter (complement var?) (keys var->info)))
+                                                   (dep/nodes graph))]
+                             (concat (dep/topo-sort graph)
+                                     (set/difference (into #{} (filter (complement var?) (keys var->info)))
+                                                     (dep/nodes graph)))))]
      (assoc analysis
+            :var->hash var->hash
             :code->info (into {} (keep (fn [[var hash]]
                                          (when-let [code (:code (var->info var))]
                                            [code (assoc (var->info var) :hash hash)]))) var->hash))))
   ([var->hash {:keys [hash form deps var]}]
    (let [hashed-deps (into #{} (map var->hash) deps)]
+     #_(when (contains? hashed-deps nil)
+         (throw (ex-info "hash missing" {:var var :deps deps :deps-without-hash (filter (complement var->hash) deps) :var->hash var->hash})))
      (sha1-base58 (pr-str (conj hashed-deps (if form (cond->> form var (drop 2)) hash)))))))
 
+#_(hash "notebooks/viewers/table.clj")
 #_(hash "notebooks/hello.clj")
 #_(hash "notebooks/elements.clj")
 #_(clojure.data/diff (hash "notebooks/how_clerk_works.clj")
