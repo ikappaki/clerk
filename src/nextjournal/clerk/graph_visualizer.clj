@@ -6,11 +6,11 @@
   (arrowic/create-viewer (arrowic/create-graph)))
 
 
-(defn show-graph [{:keys [graph var->hash]}]
+(defn show-graph [{:keys [graph var->info]}]
   (arrowic/view viewer
                 (arrowic/with-graph (arrowic/create-graph)
-                  (let [vars->verticies (into {} (map (juxt identity arrowic/insert-vertex!)) (keys var->hash))]
-                    (doseq [var (keys var->hash)]
+                  (let [vars->verticies (into {} (map (juxt identity arrowic/insert-vertex!)) (keys var->info))]
+                    (doseq [var (keys var->info)]
                       (doseq [dep (dep/immediate-dependencies graph var)]
                         (when (and (vars->verticies var)
                                    (vars->verticies dep))

@@ -73,20 +73,20 @@
 
 #_(random-multihash)
 
-(defn read+eval-cached [results-last-run vars->hash code-string]
-  (let [form (hashing/read-string code-string)
-        {:as analyzed :keys [ns-effect? var]} (hashing/analyze form)
-        hash (hashing/hash vars->hash analyzed)
+(defn read+eval-cached [results-last-run {:keys [code->info]} code-string]
+  (let [{:as info :keys [analyzed-form form ns-effect? var hash]} (code->info code-string)
         digest-file (->cache-file (str "@" hash))
-        no-cache? (or ns-effect? (hashing/no-cache? form))
+        no-cache? (or ns-effect? (hashing/no-cache? analyzed-form))
         cas-hash (when (fs/exists? digest-file)
                    (slurp digest-file))
         cached? (boolean (and cas-hash (-> cas-hash ->cache-file fs/exists?)))]
+    (when (not (:hash info))
+      (throw (ex-info "hash missing" {:code-string code-string :code->info code->info})))
     #_(prn :cached? (cond no-cache? :no-cache
                           cached? true
                           (fs/exists? digest-file) :no-cas-file
                           :else :no-digest-file)
-           :hash hash :cas-hash cas-hash :form form)
+           :hash hash :cas-hash cas-hash :form form :var var)
     (when-not (fs/exists? (cache-dir))
       (fs/create-dirs (cache-dir)))
     (or (when (and (not no-cache?)
@@ -122,7 +122,7 @@
                       nil)))
                 (wrap-with-blob-id var-value (if no-cache? (random-multihash) hash))))))))
 
-#_(read+eval-cached {} {} "(subs (slurp \"/usr/share/dict/words\") 0 1000)")
+#_(nextjournal.clerk/show! "notebooks/analysis.clj")
 
 (defn clear-cache!
   ([]
@@ -140,11 +140,11 @@
 
 #_(blob->result @nextjournal.clerk.webserver/!doc)
 
-(defn +eval-results [results-last-run vars->hash doc]
+(defn +eval-results [results-last-run analysis doc]
   (let [doc (into [] (map (fn [{:as cell :keys [type text]}]
                             (cond-> cell
                               (= :code type)
-                              (assoc :result (read+eval-cached results-last-run vars->hash text))))) doc)]
+                              (assoc :result (read+eval-cached results-last-run analysis text))))) doc)]
     (with-meta doc (-> doc blob->result (assoc :ns *ns*)))))
 
 #_(let [doc (+eval-results {} {} [{:type :markdown :text "# Hi"} {:type :code :text "[1]"} {:type :code :text "(+ 39 3)"}])

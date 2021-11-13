@@ -17,11 +17,13 @@
             [weavejester.dependency :as dep]))
 
 (defn var-name
-  "Takes a `form` and returns the name of the var, if it exists."
+  "Takes an analyzed `form` and returns the name of the var, if it exists."
   [form]
   (when (and (sequential? form)
-             (contains? '#{def defn} (first form)))
+             (= 'def (first form)))
     (second form)))
+
+#_(var-name '(def foo :bar))
 
 (defn no-cache? [form]
   (or (-> (if-let [vn (var-name form)] vn form) meta :nextjournal.clerk/no-cache boolean)
@@ -44,9 +46,8 @@
                   (resolve %)))
          (into #{}))))
 
-#_(var-dependencies '(defn foo
-                       ([] (foo "s"))
-                       ([s] (str/includes? (p/parse-string-all s) "hi"))))
+#_(var-dependencies '(def nextjournal.clerk.hashing/foo
+                       (fn* ([s] (clojure.string/includes? (rewrite-clj.parser/parse-string-all s) "hi")))))
 
 (defn analyze [form]
   (let [analyzed-form (-> form
@@ -54,7 +55,8 @@
                           (ana.passes.ef/emit-form #{:hygenic :qualified-symbols}))
         var (some-> analyzed-form var-name resolve)
         deps (cond-> (var-dependencies analyzed-form) var (disj var))]
-    (cond-> {:form (cond->> form var (drop 2))
+    (cond-> {:form form
+             :analyzed-form analyzed-form
              :ns-effect? (some? (some #{#'clojure.core/require #'clojure.core/in-ns} deps))}
       var (assoc :var var)
       (seq deps) (assoc :deps deps))))
@@ -125,12 +127,10 @@
      (reduce (fn [acc {:keys [type text]}]
                (if (= type :code)
                  (let [form (read-string text)
-                       {:keys [var deps form ns-effect?]} (analyze form)]
+                       {:as info :keys [var deps form ns-effect?]} (analyze form)]
                    (when ns-effect?
                      (eval form))
-                   (cond-> (assoc-in acc [:var->hash (if var var form)] {:file file
-                                                                         :form form
-                                                                         :deps deps})
+                   (cond-> (assoc-in acc [:var->info (if var var form)] (assoc info :file file :code text))
                      (seq deps)
                      (#(reduce (fn [{:as acc :keys [graph]} dep]
                                  (try (assoc acc :graph (dep/depend graph (if var var form) dep))
@@ -138,14 +138,14 @@
                                         (when-not (-> e ex-data :reason #{::dep/circular-dependency})
                                           (throw e))
                                         (let [{:keys [node dependency]} (ex-data e)
-                                              rec-form (concat '(do) [form (get-in acc [:var->hash dependency :form])])
+                                              rec-form (concat '(do) [form (get-in acc [:var->info dependency :form])])
                                               rec-var (symbol (str var "+" dep))]
                                           (-> acc
                                               (assoc :graph (-> graph
                                                                 (dep/remove-edge dependency node)
                                                                 (dep/depend var rec-var)
                                                                 (dep/depend dep rec-var)))
-                                              (assoc-in [:var->hash rec-var :form] rec-form)))))) % deps))))
+                                              (assoc-in [:var->info rec-var :form] rec-form)))))) % deps))))
                  acc))
              (cond-> acc markdown? (assoc :doc doc))
              doc))))
@@ -155,11 +155,11 @@
 #_(analyze-file {:graph (dep/graph)} "notebooks/recursive.clj")
 #_(analyze-file {:graph (dep/graph)} "notebooks/hello.clj")
 
-(defn unhashed-deps [var->hash]
+(defn unhashed-deps [var->info]
   (set/difference (into #{}
                         (mapcat :deps)
-                        (vals var->hash))
-                  (-> var->hash keys set)))
+                        (vals var->info))
+                  (-> var->info keys set)))
 
 #_(unhashed-deps {#'elements/fix-case {:deps #{#'rewrite-clj.node/tag}}})
 
@@ -226,39 +226,42 @@
   Recursively decends into dependency vars as well as given they can be found in the classpath.
   "
   [file]
-  (let [{:as graph :keys [var->hash]} (analyze-file file)]
+  (let [{:as graph :keys [var->info]} (analyze-file file)]
     (reduce (fn [g [source symbols]]
               (if (or (nil? source)
                       (str/ends-with? source ".jar"))
-                (update g :var->hash merge (into {} (map (juxt identity (constantly (if source (hash-jar source) {})))) symbols))
+                (update g :var->info merge (into {} (map (juxt identity (constantly (if source (hash-jar source) {})))) symbols))
                 (analyze-file g source)))
             graph
-            (group-by find-location (unhashed-deps var->hash)))))
+            (group-by find-location (unhashed-deps var->info)))))
 
 
 #_(build-graph "notebooks/hello.clj")
-#_(keys (:var->hash (build-graph "notebooks/elements.clj")))
+#_(keys (:var->info (build-graph "notebooks/elements.clj")))
 #_(dep/immediate-dependencies (:graph (build-graph "notebooks/elements.clj"))  #'nextjournal.clerk.demo/fix-case)
 #_(dep/transitive-dependencies (:graph (build-graph "notebooks/elements.clj"))  #'nextjournal.clerk.demo/fix-case)
 
-#_(keys (:var->hash (build-graph "src/nextjournal/clerk/hashing.clj")))
+#_(keys (:var->info (build-graph "src/nextjournal/clerk/hashing.clj")))
 #_(dep/topo-sort (:graph (build-graph "src/nextjournal/clerk/hashing.clj")))
 #_(dep/immediate-dependencies (:graph (build-graph "src/nextjournal/clerk/hashing.clj"))  #'nextjournal.clerk.hashing/long-thing)
 #_(dep/transitive-dependencies (:graph (build-graph "src/nextjournal/clerk/hashing.clj"))  #'nextjournal.clerk.hashing/long-thing)
 
-
 (defn hash
   ([file]
-   (let [{vars :var->hash :keys [graph]} (build-graph file)]
-     (reduce (fn [vars->hash var]
-               (if-let [info (get vars var)]
-                 (assoc vars->hash var (hash vars->hash (assoc info :var var)))
-                 vars->hash))
-             {}
-             (dep/topo-sort graph))))
-  ([var->hash {:keys [hash form deps]}]
+   (let [{:as analysis :keys [graph var->info]} (build-graph file)
+         var->hash (reduce (fn [var->hash var]
+                             (if-let [info (get var->info var)]
+                               (assoc var->hash var (hash var->hash (assoc info :var var)))
+                               var->hash))
+                           {}
+                           (dep/topo-sort graph))]
+     (assoc analysis
+            :code->info (into {} (keep (fn [[var hash]]
+                                         (when-let [code (:code (var->info var))]
+                                           [code (assoc (var->info var) :hash hash)]))) var->hash))))
+  ([var->hash {:keys [hash form deps var]}]
    (let [hashed-deps (into #{} (map var->hash) deps)]
-     (sha1-base58 (pr-str (conj hashed-deps (if form form hash)))))))
+     (sha1-base58 (pr-str (conj hashed-deps (if form (cond->> form var (drop 2)) hash)))))))
 
 #_(hash "notebooks/hello.clj")
 #_(hash "notebooks/elements.clj")
