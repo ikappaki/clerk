@@ -36,6 +36,12 @@
 
 #_(sha1-base58 "hello")
 
+(defn resolve-or-intern [var-name]
+  (or (resolve var-name)
+      (when-let [ns (and (not (str/blank? (namespace var-name)))
+                         (find-ns (symbol (namespace var-name))))]
+        (intern ns (symbol (name var-name))))))
+
 
 (defn var-dependencies [form]
   (let [var-name (var-name form)]
@@ -43,7 +49,7 @@
          (tree-seq (some-fn sequential? set? map?) seq)
          (keep #(when (and (symbol? %)
                            (not= var-name %))
-                  (resolve %)))
+                  (resolve-or-intern %)))
          (into #{}))))
 
 #_(var-dependencies '(def nextjournal.clerk.hashing/foo
@@ -55,9 +61,8 @@
   (let [analyzed-form (-> form
                           ana/analyze
                           (ana.passes.ef/emit-form #{:hygenic :qualified-symbols}))
-        var (when-let [var-name (var-name var-name)]
-              (or (resolve var-name)
-                  (intern (create-ns (symbol (namespace var-name))) (symbol (name var-name)))))
+        var (when-let [var-name (var-name analyzed-form)]
+              (resolve-or-intern var-name))
         deps (cond-> (var-dependencies analyzed-form) var (disj var))]
     (cond-> {:form form
              :analyzed-form analyzed-form
@@ -66,7 +71,7 @@
       (seq deps) (assoc :deps deps))))
 
 #_(analyze '(let [x 2] x))
-#_(analyze '(def b :a))
+#_(analyze '(def analyze (fn [])))
 #_(analyze #{'b})
 #_(analyze '(range b))
 #_(analyze '(defn foo [s] (str/includes? (p/parse-string-all s) "hi")))
@@ -228,22 +233,51 @@
                   (-> var->info keys set)))
 
 #_(unhashed-deps {#'elements/fix-case {:deps #{#'rewrite-clj.node/tag}}})
-
-(defn build-graph
-  "Analyzes the forms in the given file and builds a dependency graph of the vars.
+(do
+  (defn build-graph
+    "Analyzes the forms in the given file and builds a dependency graph of the vars.
 
   Recursively decends into dependency vars as well as given they can be found in the classpath.
   "
-  [file]
-  (let [{:as graph :keys [var->info]} (analyze-file file)]
-    (reduce (fn [g [source symbols]]
-              (if (or (nil? source)
-                      (str/ends-with? source ".jar"))
-                (update g :var->info merge (into {} (map (juxt identity (constantly (if source (hash-jar source) {})))) symbols))
-                (analyze-file g source)))
-            graph
-            (group-by find-location (unhashed-deps var->info)))))
+    [file]
+    (let [{:as graph :keys [var->info]} (analyze-file file)]
+      (loop [{:as graph :keys [var->info]} graph]
+        (if-let [unhashed (not-empty (unhashed-deps var->info))]
+          (let [{:as graph :keys [var->info]} (reduce (fn [{:as graph :keys [visited]} [source symbols]]
+                                                        (prn :source source)
+                                                        (-> (if (or (nil? source)
+                                                                    (str/ends-with? source ".jar"))
+                                                              (update graph :var->info merge (into {} (map (juxt identity (constantly (if source (hash-jar source) {})))) symbols))
+                                                              (if (contains? visited source)
+                                                                (do (prn :visisted)
+                                                                    graph)
+                                                                (analyze-file graph source)))
+                                                            (update :visited (fnil conj #{}) source)))
+                                                      graph
+                                                      (group-by find-location unhashed))
+                unhashed-next (unhashed-deps var->info)]
+            (prn :unhashed (count unhashed) #_#_:uh unhashed :next (count unhashed-next))
+            #_(prn :i var->info)
+            (if (= unhashed unhashed-next)
+              (do
+                #_(prn :stationary unhashed)
+                graph)
+              (recur graph))
+            )
+          graph))))
+  (time
+   (let [{:keys [var->info]}
+         (build-graph "notebooks/test.clj")
+         unhashed (unhashed-deps var->info)]
+     (prn (take 10 unhashed)))))
 
+(find-location #'nextjournal.clerk/with-viewer)
+
+(keys (analyze-file "src/nextjournal/clerk.clj"))
+
+(filter var? (keys (:var->info (analyze-file "src/nextjournal/clerk.clj"))))
+
+(find-location #'clojure.core/shuffle)
 
 #_(build-graph "notebooks/hello.clj")
 #_(keys (:var->info (build-graph "notebooks/elements.clj")))
@@ -255,30 +289,31 @@
 #_(dep/immediate-dependencies (:graph (build-graph "src/nextjournal/clerk/hashing.clj"))  #'nextjournal.clerk.hashing/long-thing)
 #_(dep/transitive-dependencies (:graph (build-graph "src/nextjournal/clerk/hashing.clj"))  #'nextjournal.clerk.hashing/long-thing)
 
-(defn hash
-  ([file]
-   (let [{:as analysis :keys [graph var->info]} (build-graph file)
-         var->hash (reduce (fn [var->hash var]
-                             (if-let [info (get var->info var)]
-                               (assoc var->hash var (hash var->hash (assoc info :var var)))
-                               var->hash))
-                           {}
-                           (let [d (set/difference (into #{} (filter (complement var?) (keys var->info)))
-                                                   (dep/nodes graph))]
-                             (concat (dep/topo-sort graph)
-                                     (set/difference (into #{} (filter (complement var?) (keys var->info)))
-                                                     (dep/nodes graph)))))]
-     (assoc analysis
-            :var->hash var->hash
-            :code->info (into {} (keep (fn [[var hash]]
-                                         (when-let [code (:code (var->info var))]
-                                           [code (assoc (var->info var) :hash hash)]))) var->hash))))
-  ([var->hash {:keys [hash form deps var]}]
-   (let [hashed-deps (into #{} (map var->hash) deps)]
-     #_(when (contains? hashed-deps nil)
+(do
+  (defn hash
+    ([file]
+     (let [{:as analysis :keys [graph var->info]} (build-graph file)
+           var->hash (reduce (fn [var->hash var]
+                               (if-let [info (get var->info var)]
+                                 (assoc var->hash var (hash var->hash (assoc info :var var)))
+                                 #_(throw (ex-info "foo" {:var var}))))
+                             {}
+                             (let [d (set/difference (into #{} (filter (complement var?) (keys var->info)))
+                                                     (dep/nodes graph))]
+                               (concat (dep/topo-sort graph)
+                                       (set/difference (into #{} (filter (complement var?) (keys var->info)))
+                                                       (dep/nodes graph)))))]
+       (assoc analysis
+              :var->hash var->hash
+              :code->info (into {} (keep (fn [[var hash]]
+                                           (when-let [code (:code (var->info var))]
+                                             [code (assoc (var->info var) :hash hash)]))) var->hash))))
+    ([var->hash {:keys [hash form deps var]}]
+     (let [hashed-deps (into #{} (map var->hash) deps)]
+       (when (contains? hashed-deps nil)
          (throw (ex-info "hash missing" {:var var :deps deps :deps-without-hash (filter (complement var->hash) deps) :var->hash var->hash})))
-     (sha1-base58 (pr-str (conj hashed-deps (if form (cond->> form var (drop 2)) hash)))))))
-
+       (sha1-base58 (pr-str (conj hashed-deps (if form (cond->> form var (drop 2)) hash)))))))
+  (hash "notebooks/viewers/table.clj"))
 #_(hash "notebooks/viewers/table.clj")
 #_(hash "notebooks/hello.clj")
 #_(hash "notebooks/elements.clj")
