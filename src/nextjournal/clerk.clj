@@ -282,6 +282,7 @@
          "paren_soup"
          #_"readme" ;; TODO: add back when we have Clojure cells in md
          "rule_30"
+         "sicmutils"
          "viewer_api"
          "viewers/html"
          "viewers/image"
