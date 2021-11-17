@@ -36,7 +36,7 @@
 
 ;; 🔴 this stackoverflows and it's not elided
 (take 10
-      (((exp D) sin) 'x))
+      (simplify (((exp D) sin) 'x)))
 
 
 ;; ### Automatic Diff
@@ -58,7 +58,7 @@
 
 
 ;; ### Structures
-(down
+(up
  'alphadot_beta
  'xdotdot
  'zetaprime_alphadot
