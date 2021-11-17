@@ -41,11 +41,13 @@
 
 #_(->edn [:vec (with-meta [] {'clojure.core.protocols/datafy (fn [x] x)}) :var #'->edn])
 
-(defn described-result [_ns {:keys [result blob-id]}]
-  (merge {:nextjournal/viewer :clerk/result
-          :nextjournal/value {:blob-id blob-id}}
-         (when (v/wrapped-value? result)
-           (dissoc result :nextjournal/value :nextjournal/viewer))))
+(defn described-result [ns {:keys [result blob-id]}]
+  (let [described-result (v/describe result {:viewers (v/get-viewers ns (v/viewers result))})
+        metadata (when (v/wrapped-value? described-result)
+                   (dissoc described-result :nextjournal/value))]
+    (merge {:nextjournal/viewer :clerk/result
+            :nextjournal/value (merge {:blob-id blob-id} metadata)}
+           metadata)))
 
 (defn inline-result [ns {:keys [result]}]
   (let [described-result (v/describe result {:viewers (v/get-viewers ns (v/viewers result))})]
