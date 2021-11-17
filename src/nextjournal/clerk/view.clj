@@ -47,7 +47,7 @@
                    (dissoc described-result :nextjournal/value))]
     (merge {:nextjournal/viewer :clerk/result
             :nextjournal/value (merge {:blob-id blob-id} metadata)}
-           metadata)))
+           (dissoc metadata :nextjournal/viewer))))
 
 (defn inline-result [ns {:keys [result]}]
   (let [described-result (v/describe result {:viewers (v/get-viewers ns (v/viewers result))})]
