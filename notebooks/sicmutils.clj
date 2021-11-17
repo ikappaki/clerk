@@ -4,6 +4,7 @@
 ;; - [ ] call simplify by default (?)
 ;; - [ ] decide if aliases are needed in set-viewers after bootstrap-repl
 ;; - [ ] fix the some-fn to make pred simpler
+;; - [ ] some equations produce katex errors
 ;; - [ ] fix stackoverflow on ∞-taylor expansion series (?)
 
 (ns sicmutils
@@ -11,10 +12,14 @@
             [sicmutils.env :as env]
             [sicmutils.expression :as e]
             [sicmutils.structure :as s]
+            [sicmutils.function :as f]
             [sicmutils.expression.render :as e.render]))
 
 (clerk/set-viewers!
- [{:pred (fn [x] (or (e/literal? x) (s/structure? x) (symbol? x)))
+ [{:pred (fn [x] (or (e/literal? x)
+                     (s/structure? x)
+                     #_(f/function? x) ;; won't render latex correctly
+                     (symbol? x)))
    :transform-fn e.render/->TeX
    :render-fn (fn [latex] (v/katex-viewer latex))}])
 
@@ -29,7 +34,7 @@
 (first (((exp D) sin) 'x))
 
 
-;; 🔴 this stackoverflows if we don't take some ! 👇
+;; 🔴 this stackoverflows and it's not elided
 (take 10
       (((exp D) sin) 'x))
 
@@ -52,8 +57,7 @@
   (((Lagrange-equations L) state) 't))
 
 
-;; ### Vectors
-
+;; ### Structures
 (down
  'alphadot_beta
  'xdotdot
@@ -64,6 +68,49 @@
  'alphatilde)
 
 (* (down 'x 'y 'z) (up 'a 'b 'c))
+
+(cross-product ['x 'y 'z] ['a 'b 'c])
+
+(def r (literal-function 'r))
+(def theta (literal-function 'theta))
+
+(defn e [t] ((up cos sin) t))
+
+(defn c [t] ((up (- sin) cos) t))
+
+
+;; tangential unit
+((e theta) 't)
+
+;; central unit
+((c theta) 't)
+
+(simplify ((D (e theta)) 't))
+
+(simplify ((* (D theta) (c theta)) 't))
+
+(= (simplify ((D (e theta)) 't))
+   (simplify (* (D theta) (c theta))))
+
+(defn tm [t] ((* r (e theta)) t))
+
+(def tv "tangential velocity" (D tm))
+
+(tm 't)
+
+(simplify (tv 't))
+
+((simplify tv) 't)
+
+(def tv' (simplify (+ (* (D r) (e theta)) (* r (D theta) (c theta)))))
+
+
+(tv' 't)
+
+(= tv tv')
+(= (tv 't) (tv' 't))
+
+(simplify ((D tv) 't))
 
 (comment
 
