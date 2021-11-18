@@ -287,6 +287,7 @@
          "viewers/image"
          "viewers/markdown"
          "viewers/plotly"
+         "viewers/svg"
          "viewers/table"
          "viewers/tex"
          "viewers/vega"]))
