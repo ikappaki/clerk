@@ -1,7 +1,8 @@
 ;; # 📝 Inline SVG
 (ns ^:nextjournal.clerk/no-cache viewers.svg
-  (:require [arrowic.core :as arrowic]
-            [nextjournal.clerk :as clerk]))
+  (:require [weavejester.dependency :as dep]
+            [arrowic.core :as arrowic]
+            [nextjournal.clerk]))
 
 (nextjournal.clerk/set-viewers!
  [{:pred (fn [m] (and (map? m) (contains? m :nextjournal/svg)))
