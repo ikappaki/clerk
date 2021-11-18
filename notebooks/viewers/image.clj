@@ -8,9 +8,8 @@
 
 ;; We set a custom viewer for `bytes?` that includes a `:fetch-fn`, returning a wrapped value with a `:nextjournal/content-type` key set.
 (clerk/set-viewers! [{:pred bytes?
-                      :fetch-fn (fn [_ bytes] {:nextjournal/content-type "image/png"
-                                               :nextjournal/value bytes})
-                      :render-fn (fn [blob] (v/html [:img {:src (v/url-for blob)}]))}])
+                      :fetch-fn (fn [_ png] (.encodeToString (java.util.Base64/getEncoder) png))
+                      :render-fn (fn [base64png] (v/html [:img {:src (str "data:image/png;base64, " base64png)}]))}])
 
 (.. (HttpClient/newHttpClient)
     (send (.build (HttpRequest/newBuilder (URI. "https://upload.wikimedia.org/wikipedia/commons/5/57/James_Clerk_Maxwell.png")))
