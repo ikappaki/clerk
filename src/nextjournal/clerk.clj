@@ -298,8 +298,9 @@
   [{:keys [paths out-path live-js?]
     :or {paths clerk-docs
          out-path "public/build"
-         live-js? view/live-js?}}]
-  (let [docs (into {} (map (fn [path] {path (file->viewer path)}) paths))
+         live-js? view/live-js?}
+    :as opts}]
+  (let [docs (into {} (map (fn [path] {path (file->viewer opts path)}) paths))
         out-html (str out-path fs/file-separator "index.html")]
     (when-not (fs/exists? (fs/parent out-html))
       (fs/create-dirs (fs/parent out-html)))

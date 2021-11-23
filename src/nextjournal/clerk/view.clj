@@ -70,11 +70,21 @@
 
 #_(nextjournal.clerk/show! "notebooks/hello.clj")
 
+(defn doc->toc [doc]
+  ;; TODO: add some api upstream
+  (let [xf (map (fn [{:as node l :heading-level}] {:type :toc :level l :node node}))]
+    (reduce (xf nextjournal.markdown.parser/into-toc)
+            {:type :toc}
+            (into [] (comp
+                      (filter (comp #{:markdown} :type))
+                      (mapcat (comp :content :doc))
+                      (filter (comp #{:heading} :type))) doc))))
+
 (defn doc->viewer
   ([doc] (doc->viewer {} doc))
-  ([{:keys [inline-results?] :or {inline-results? false}} doc]
+  ([{:keys [toc? inline-results?] :or {inline-results? false}} doc]
    (let [{:keys [ns]} (meta doc)]
-     (cond-> (into []
+     (cond-> (into (if toc? [(v/md (doc->toc doc))] [])
                    (mapcat (fn [{:as x :keys [type text result doc skip-result?]}]
                              (case type
                                :markdown [(v/md doc)]
