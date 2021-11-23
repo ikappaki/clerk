@@ -72,13 +72,12 @@
 
 (defn doc->toc [doc]
   ;; TODO: add some api upstream
-  (let [xf (map (fn [{:as node l :heading-level}] {:type :toc :level l :node node}))]
-    (reduce (xf nextjournal.markdown.parser/into-toc)
-            {:type :toc}
-            (into [] (comp
-                      (filter (comp #{:markdown} :type))
-                      (mapcat (comp :content :doc))
-                      (filter (comp #{:heading} :type))) doc))))
+  (let [xf (comp
+            (filter (comp #{:markdown} :type))
+            (mapcat (comp :content :doc))
+            (filter (comp #{:heading} :type))
+            (map (fn [{:as node l :heading-level}] {:type :toc :level l :node node})))]
+    (reduce (xf nextjournal.markdown.parser/into-toc) {:type :toc} doc)))
 
 (defn doc->viewer
   ([doc] (doc->viewer {} doc))
