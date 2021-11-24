@@ -835,9 +835,21 @@ black")}]))}
   (r/as-element (cond-> x (fn? x) vector)))
 
 (def mathjax-viewer (comp normalize-viewer mathjax/viewer))
-(def code-viewer (comp normalize-viewer code/viewer))
 (def plotly-viewer (comp normalize-viewer plotly/viewer))
 (def vega-lite-viewer (comp normalize-viewer vega-lite/viewer))
+
+(def code-viewer-old (comp normalize-viewer code/viewer))
+
+(defn code-viewer [code-string]
+  (r/with-let [!hidden? (r/atom true)]
+    (html
+     (if @!hidden?
+       [:button.mx-auto.block.rounded-sm.cursor-pointer.bg-indigo-200.hover:bg-indigo-300.leading-none
+        {:style {:font-size "11px" :padding "1px 3px"}
+         :on-click #(swap! !hidden? not)}
+        "Show code…"]
+       [inspect (normalize-viewer (code/viewer code-string))]))))
+
 
 (defn url-for [{:keys [blob-id]}]
   (str "/_blob/" blob-id))
