@@ -290,7 +290,10 @@
    ["index.md"
     "notebooks/*.md"]))
 
-(defn set-index [path] (if (re-matches #"^index\.(clj|md)$" path) :index path))
+(defn set-index [path]
+  (if-some [[_ pref] (re-matches #"^(.*?)(?:\/)?index\.(clj|md)$" path)]
+    pref
+    path))
 
 (defn safe-build [path]
   (try [(set-index path) (file->viewer path)]

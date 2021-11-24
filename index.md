@@ -9,4 +9,5 @@
 And a list of notebooks:
 
 - [Markdown](#/notebooks/markdown.md)
-- [Tables](#/notebooks/viewers/table.clj)
+- [Hello](#/notebooks/hello.clj)
+- [Viewers](#/notebooks/viewers)

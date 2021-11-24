@@ -3,24 +3,26 @@
             [reagent.core :as r]
             [reagent.dom :as rdom]
             [reitit.frontend :as rf]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [clojure.string :as str]))
 
 (defonce path->doc
   (r/atom {}))
 
 (defn show [{:keys [path]}]
   (sci-viewer/reset-doc (@path->doc path))
-  [:<>
-   [:div.flex.flex-col.items-center
-    [:div.mt-8.flex.items-center.text-xs.w-full.max-w-prose.px-8.sans-serif.text-gray-400
-     [:a.hover:text-indigo-500 {:href (rfe/href ::index)} "Back to index"]
-     [:span.mx-1 "/"]
-     [:a.hover:text-indigo-500 {:href "https://github.com/nextjournal/clerk"} "Generated with Clerk."]]]
+  [:<> ;; FIXME: better check for rewritten index
+   (when (or (str/ends-with? path ".clj") (str/ends-with? path ".md"))
+     [:div.flex.flex-col.items-center
+      [:div.mt-8.flex.items-center.text-xs.w-full.max-w-prose.px-8.sans-serif.text-gray-400
+       [:a.hover:text-indigo-500 {:href (rfe/href ::index)} "Back to index"]
+       [:span.mx-1 "/"]
+       [:a.hover:text-indigo-500 {:href "https://github.com/nextjournal/clerk"} "Generated with Clerk."]]])
    [sci-viewer/root]])
 
 (defn index [_]
-  (if (contains? @path->doc :index)
-    [show {:path :index}]
+  (if (contains? @path->doc "")
+    [show {:path ""}]
     [:div.bg-gray-100.flex.justify-center.overflow-y-auto.w-screen.h-screen.p-4.md:p-0
      [:div.md:my-12.w-full.md:max-w-lg
       [:div.bg-white.shadow-lg.rounded-lg.border
