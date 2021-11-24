@@ -838,17 +838,16 @@ black")}]))}
 (def plotly-viewer (comp normalize-viewer plotly/viewer))
 (def vega-lite-viewer (comp normalize-viewer vega-lite/viewer))
 
-(def code-viewer-old (comp normalize-viewer code/viewer))
-
-(defn code-viewer [code-string]
-  (r/with-let [!hidden? (r/atom true)]
+(defn code-viewer [node]
+  (r/with-let [!folded? (r/atom (not (and (map? node)
+                                          (:nextjournal/fold-code? node))))]
     (html
-     (if @!hidden?
+     (if @!folded?
        [:button.mx-auto.block.rounded-sm.cursor-pointer.bg-indigo-200.hover:bg-indigo-300.leading-none
         {:style {:font-size "11px" :padding "1px 3px"}
-         :on-click #(swap! !hidden? not)}
+         :on-click #(swap! !folded? not)}
         "Show code…"]
-       [inspect (normalize-viewer (code/viewer code-string))]))))
+       [inspect (normalize-viewer (code/viewer (viewer/value node)))]))))
 
 
 (defn url-for [{:keys [blob-id]}]

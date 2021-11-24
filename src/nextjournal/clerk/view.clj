@@ -82,7 +82,8 @@
                                :code (let [{:nextjournal/keys [value blob-id hide-code? hide-result?]} result]
                                        (cond-> []
                                          (not hide-code?)
-                                         (conj (merge (v/code text) (select-keys result [:nextjournal/fold-code?])))
+                                         (conj {:nextjournal/value (merge (v/wrap-value text) (select-keys result [:nextjournal/fold-code?]))
+                                                :nextjournal/viewer :code})
 
                                          (and result (not hide-result?))
                                          (conj (cond
@@ -98,6 +99,7 @@
 
 #_(meta (doc->viewer (nextjournal.clerk/eval-file "notebooks/hello.clj")))
 #_(nextjournal.clerk/show! "notebooks/test.clj")
+#_(doc->viewer @nextjournal.clerk.webserver/!doc)
 
 (defonce ^{:doc "Load dynamic js from shadow or static bundle from cdn."}
   live-js?
