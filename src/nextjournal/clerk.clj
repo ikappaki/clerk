@@ -290,13 +290,15 @@
    ["index.md"
     "notebooks/*.md"]))
 
-(defn set-index [path]
+(defn rewrite-index-path [path]
   (if-some [[_ pref] (re-matches #"^(.*?)(?:\/)?index\.(clj|md)$" path)]
     pref
     path))
 
-(defn safe-build [path]
-  (try [(set-index path) (file->viewer path)]
+(defn safe-build
+  "Same as `(juxt rewrite-index-path file->viewer)` but catches and logs an error while building notebook at `path`."
+  [path]
+  (try [(rewrite-index-path path) (file->viewer path)]
        (catch Throwable e (println "Error building " path " " (ex-message e)))))
 
 (defn build-static-app!
@@ -308,8 +310,7 @@
   (let [docs (-> {}
                  (into (comp
                         (mapcat (partial fs/glob "."))
-                        (map (comp (juxt set-index file->viewer)
-                                   #_safe-build
+                        (map (comp (juxt rewrite-index-path file->viewer)
                                    str)))
                        paths))
         out-html (str out-path fs/file-separator "index.html")]
