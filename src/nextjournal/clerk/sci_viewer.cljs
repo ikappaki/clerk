@@ -849,7 +849,14 @@ black")}]))}
     (string? data)
     (markdown/viewer data)
     (and (map? data) (contains? data :content) (contains? data :type))
-    (with-viewer :hiccup (md.transform/->hiccup markdown/default-renderers data))))
+    (with-viewer :hiccup
+                 (md.transform/->hiccup (assoc markdown/default-renderers
+                                               :monospace (fn [_ {:keys [ref-id]}]
+                                                            ;; TODO: tooltip view to show original text producing the result
+                                                            ;; TODO: assign it into markdown code instead of this lookup
+                                                            [inspect (some #(and (= ref-id (:nextjournal/ref-id %)) %)
+                                                                           (:nextjournal/value @!doc))]))
+                                        data))))
 
 (defn url-for [{:keys [blob-id]}]
   (str "/_blob/" blob-id))

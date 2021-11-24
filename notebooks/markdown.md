@@ -48,7 +48,7 @@ At present, Clerk will split top level forms which are grouped togetehr under th
   (md.transform/->hiccup renderers sliced))
 ```
 
-and finally render via Clerk's `html` helper.
+and finally render via Clerk's helper.
 
 ```clojure
 (clerk/html hiccup)
@@ -56,4 +56,6 @@ and finally render via Clerk's `html` helper.
 
 ## Appendix
 
-Don't forget the closing slice 🍕 of markdown! 
+Don't forget the closing slice 🍕 of dough 
+- a `(+ 1 2)` ding
+- for `(clerk/html [:em.red "magic"])` fun

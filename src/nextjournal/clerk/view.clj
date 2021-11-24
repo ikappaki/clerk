@@ -56,9 +56,10 @@
 
 #_(->hash (range 104))
 
-(defn ->result [ns {:keys [result blob-id]} lazy-load?]
+(defn ->result [ns {:keys [result blob-id ref-id]} lazy-load?]
   (let [described-result (v/describe result {:viewers (v/get-viewers ns (v/viewers result))})]
     (merge {:nextjournal/viewer :clerk/result
+            :nextjournal/ref-id ref-id
             :nextjournal/value (cond-> (try {:nextjournal/edn (->edn described-result)}
                                             (catch Throwable _e
                                               {:nextjournal/string (pr-str result)}))
@@ -75,7 +76,7 @@
   ([{:keys [inline-results?] :or {inline-results? false}} doc]
    (let [{:keys [ns]} (meta doc)]
      (cond-> (into []
-                   (mapcat (fn [{:as x :keys [type text result doc skip-result?]}]
+                   (mapcat (fn [{:as x :keys [type text result ref-id doc skip-result?]}]
                              (case type
                                :markdown [(v/md doc)]
                                :code (cond-> [(merge (v/code text) (select-keys x [:glue?]))]
@@ -85,7 +86,9 @@
                                                (:result result)
 
                                                :else
-                                               (->result ns result (and (not inline-results?)
+                                               (->result ns
+                                                         (cond-> result ref-id (assoc :ref-id ref-id))
+                                                         (and (not inline-results?)
                                                                         (contains? result :blob-id)))))))))
                    doc)
        true v/notebook

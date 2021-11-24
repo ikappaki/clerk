@@ -99,31 +99,48 @@
   ;; TODO: assign different types to fenced vs indented code blocks
   (and (= :code type) (contains? node :info)))
 
-(defn parse-markdown-file [file]
-  (loop [{:as state :keys [doc nodes] ::keys [md-slice]} {:doc [] ::md-slice [] :nodes (:content (markdown/parse (slurp file)))}]
-    (if-some [node (first nodes)]
-      (recur
-       (if (code-cell? node)
-         (cond-> state
-           (seq md-slice)
-           (-> (update :doc conj {:type :markdown :doc {:type :doc :content md-slice}})
-               (assoc ::md-slice []))
+(defn doc-walk [p f {:as node :keys [content]}]
+  ;; TODO: move to viewers/markdown repo
+  (cond-> node
+    (p node) f
+    (seq content) (update :content #(into [] (map (partial doc-walk p f)) %))))
 
-           :always
-           (-> (update :doc #(let [form-nodes (-> (markdown.transform/->text node) str/trim p/parse-string-all :children
+(defn doc-reduce [rf init {:as node :keys [content]}]
+  (reduce (partial doc-reduce rf) (rf init node) content))
+
+(defn assign-refs [doc]
+  (doc-walk (comp #{:monospace} :type)
+            #(assoc % :ref-id (java.util.UUID/randomUUID))
+            doc))
+
+(defn parse-markdown-file [file]
+  (let [apply-markdown-slice (fn [{:as state ::keys [md-slice]}]
+                               (let [mddoc (when (seq md-slice) {:type :doc :content md-slice})]
+                                 (doc-reduce (fn [acc {:as node :keys [ref-id]}]
+                                               (if ref-id
+                                                 (update acc :doc conj {:type :code :text (markdown.transform/->text node) :ref-id ref-id})
+                                                 acc))
+                                             (-> state
+                                                 (assoc ::md-slice [])
+                                                 (cond-> mddoc (update :doc conj {:type :markdown :doc mddoc})))
+                                             mddoc)))]
+    (loop [{:as state :keys [doc nodes] ::keys [md-slice]}
+           {:doc [] ::md-slice [] :nodes (:content (assign-refs (markdown/parse (slurp file))))}]
+      (if-some [node (first nodes)]
+        (recur
+         (if (code-cell? node)
+           (-> state
+               apply-markdown-slice
+               (update :doc #(let [form-nodes (-> (markdown.transform/->text node) str/trim p/parse-string-all :children
                                                   (->> (filter (comp no-junk n/tag))))
                                    last (dec (count form-nodes))]
                                (into % (map-indexed (fn [i n] (cond-> {:type :code :text (n/string n)}
                                                                 (not= last i) (assoc :skip-result? true)
-                                                                (not= 0 i)    (assoc :glue? true))))
+                                                                (not= 0 i) (assoc :glue? true))))
                                      form-nodes)))
-               (update :nodes rest)))
-
-         (-> state (update ::md-slice conj node) (update :nodes rest))))
-
-      (cond-> doc
-        (seq md-slice)
-        (conj {:type :markdown :doc {:type :doc :content md-slice}})))))
+               (update :nodes rest))
+           (-> state (update ::md-slice conj node) (update :nodes rest))))
+        (-> state apply-markdown-slice :doc)))))
 
 (defn parse-file
   ([file] (parse-file {} file))
