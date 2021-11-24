@@ -1,5 +1,5 @@
 ;; # Hashing Things!!!!
-(ns ^:nextjournal.clerk/no-cache nextjournal.clerk.hashing
+(ns ^:nextjournal.clerk/no-cache ^:nextjournal.clerk/hide-result nextjournal.clerk.hashing
   (:refer-clojure :exclude [hash read-string])
   (:require [babashka.fs :as fs]
             [clojure.core :as core]
@@ -23,11 +23,23 @@
              (contains? '#{def defn} (first form)))
     (second form)))
 
-(defn no-cache? [form]
-  (or (-> (if-let [vn (var-name form)] vn form) meta :nextjournal.clerk/no-cache boolean)
-      (-> *ns* meta :nextjournal.clerk/no-cache boolean)))
+(defn read-bool-property
+  "Tries reading the property with the given `prop-key` from the metadata of the
+  form or var falling back to reading it from the namespace."
+  [prop-key form]
+  (let [form-or-var (cond-> form (var-name form) var-name)
+        subject (if (contains? (meta form-or-var) prop-key) form-or-var *ns*)]
+    (-> subject meta prop-key boolean)))
 
-#_(no-cache? '(rand-int 10))
+(def no-cache?    (partial read-bool-property :nextjournal.clerk/no-cache))
+(def hide-code?   (partial read-bool-property :nextjournal.clerk/hide-code))
+(def hide-result? (partial read-bool-property :nextjournal.clerk/hide-result))
+(def fold-code?   (partial read-bool-property :nextjournal.clerk/fold-code))
+
+#_(no-cache? '(rand-int 10)) ;; falls back to *ns*
+#_(no-cache? '^{:nextjournal.clerk/no-cache false} (rand-int 10))
+#_(hide-result? '(rand-int 10))
+#_(hide-result?  '^{:nextjournal.clerk/hide-result false} (rand-int 10))
 
 (defn sha1-base58 [s]
   (-> s digest/sha1 multihash/base58))

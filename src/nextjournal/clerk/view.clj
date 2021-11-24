@@ -57,12 +57,12 @@
 
 #_(->hash (range 104))
 
-(defn ->result [ns {:keys [result blob-id]} lazy-load?]
-  (let [described-result (v/describe result {:viewers (v/get-viewers ns (v/viewers result))})]
+(defn ->result [ns {:nextjournal/keys [value blob-id]} lazy-load?]
+  (let [described-result (v/describe value {:viewers (v/get-viewers ns (v/viewers value))})]
     (merge {:nextjournal/viewer :clerk/result
             :nextjournal/value (cond-> (try {:nextjournal/edn (->edn described-result)}
                                             (catch Throwable _e
-                                              {:nextjournal/string (pr-str result)}))
+                                              {:nextjournal/string (pr-str value)}))
                                  lazy-load?
                                  (assoc :nextjournal/fetch-opts {:blob-id blob-id}
                                         :nextjournal/hash (->hash-str [blob-id described-result])))}
@@ -79,15 +79,19 @@
                    (mapcat (fn [{:as x :keys [type text result]}]
                              (case type
                                :markdown [(v/md text)]
-                               :code (cond-> [(v/code text)]
-                                       (contains? x :result)
-                                       (conj (cond
-                                               (v/registration? (:result result))
-                                               (:result result)
+                               :code (let [{:nextjournal/keys [value blob-id hide-code? hide-result?]} result]
+                                       (cond-> []
+                                         (not hide-code?)
+                                         (conj (merge (v/code text) (select-keys result [:nextjournal/fold-code?])))
 
-                                               :else
-                                               (->result ns result (and (not inline-results?)
-                                                                        (contains? result :blob-id)))))))))
+                                         (and result (not hide-result?))
+                                         (conj (cond
+                                                 (v/registration? value)
+                                                 value
+
+                                                 :else
+                                                 (->result ns result (and (not inline-results?)
+                                                                          blob-id)))))))))
                    doc)
        true v/notebook
        ns (assoc :scope (v/datafy-scope ns))))))

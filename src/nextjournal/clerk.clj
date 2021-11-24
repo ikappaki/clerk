@@ -27,7 +27,9 @@
   (str (config/cache-dir) fs/file-separator hash))
 
 (defn wrap-with-blob-id [result hash]
-  {:result result :blob-id (cond-> hash (not (string? hash)) multihash/base58)})
+  (-> result
+      v/wrap-value
+      (assoc :nextjournal/blob-id (cond-> hash (not (string? hash)) multihash/base58))))
 
 #_(wrap-with-blob-id :test "foo")
 
@@ -61,6 +63,11 @@
 
 #_(worth-caching? 0.1)
 
+(defn extract-view-opts [form]
+  {:nextjournal/hide-code?   (hashing/hide-code? form)
+   :nextjournal/fold-code?   (hashing/fold-code? form)
+   :nextjournal/hide-result? (hashing/hide-result? form)})
+
 (defn read+eval-cached [results-last-run vars->hash code-string]
   (let [form (hashing/read-string code-string)
         {:as analyzed :keys [ns-effect? var]} (hashing/analyze form)
@@ -69,7 +76,8 @@
         no-cache? (or ns-effect? (hashing/no-cache? form))
         cas-hash (when (fs/exists? digest-file)
                    (slurp digest-file))
-        cached? (boolean (and cas-hash (-> cas-hash ->cache-file fs/exists?)))]
+        cached? (boolean (and cas-hash (-> cas-hash ->cache-file fs/exists?)))
+        view-opts (extract-view-opts form)]
     #_(prn :cached? (cond no-cache? :no-cache
                           cached? true
                           (fs/exists? digest-file) :no-cas-file
@@ -84,7 +92,7 @@
                                                                           (thaw-from-cas cas-hash)) hash)]
               (when var
                 (intern *ns* (-> var symbol name symbol) result))
-              result+blob)
+              (merge result+blob view-opts))
             (catch Exception _e
               ;; TODO better report this error, anything that can't be read shouldn't be cached in the first place
               #_(prn :thaw-error e)
@@ -95,20 +103,20 @@
                             (let [no-cache? (not (worth-caching? time-ms))]
                               #_(when no-cache? (prn :not-worth-caching time-ms))
                               no-cache?))
-              var-value (cond-> result (var? result) deref)]
-          (if (fn? var-value)
-            {:result var-value}
+              result-value (cond-> result (instance? clojure.lang.IDeref result) deref)]
+          (if (fn? result-value)
+            (merge {:result result-value} view-opts)
             (do (when-not (or no-cache?
-                              (instance? clojure.lang.IDeref var-value)
-                              (instance? clojure.lang.MultiFn var-value)
-                              (instance? clojure.lang.Namespace var-value)
-                              (and (seq? form) (contains? #{'ns 'in-ns 'require} (first form))))
+                              (instance? clojure.lang.IDeref result-value)
+                              (instance? clojure.lang.MultiFn result-value)
+                              (instance? clojure.lang.Namespace result-value))
                   (try
-                    (spit digest-file (hash+store-in-cas! var-value))
+                    (spit digest-file (hash+store-in-cas! result-value))
                     (catch Exception _e
                       #_(prn :freeze-error e)
                       nil)))
-                (wrap-with-blob-id var-value (if no-cache? (view/->hash-str var-value) hash))))))))
+                (merge (wrap-with-blob-id result-value (if no-cache? (view/->hash-str result-value) hash))
+                       view-opts)))))))
 
 #_(read+eval-cached {} {} "(subs (slurp \"/usr/share/dict/words\") 0 1000)")
 
