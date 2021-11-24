@@ -280,21 +280,21 @@
          "paren_soup"
          #_"readme" ;; TODO: add back when we have Clojure cells in md
          "rule_30"
-         "viewer_api"
-         "viewers/html"
-         "viewers/image"
-         "viewers/markdown"
-         "viewers/plotly"
-         "viewers/table"
-         "viewers/tex"
-         "viewers/vega"]
+         "viewer_api"]
         (map #(str "notebooks/" % ".clj")))
+
+   ;; all of viewers notebooks
+   ["notebooks/viewers/*.clj"]
 
    ;; md notebooks
    ["index.md"
-    "notebooks/markdown.md"]))
+    "notebooks/*.md"]))
 
 (defn set-index [path] (if (re-matches #"^index\.(clj|md)$" path) :index path))
+
+(defn safe-build [path]
+  (try [(set-index path) (file->viewer path)]
+       (catch Throwable e (println "Error building " path " " (ex-message e)))))
 
 (defn build-static-app!
   "Builds a static html app of the notebooks at `paths`."
@@ -303,12 +303,12 @@
          out-path "public/build"
          live-js? view/live-js?}}]
   (let [docs (-> {}
-                 (into (map (juxt set-index file->viewer)) paths)
-                 ;; NOTE: As an alternative build index as notebook
-                 #_
-                 (cond->
-                   (not (has-index? paths))
-                   (assoc :index (default-index-notebook paths)) ))
+                 (into (comp
+                        (mapcat (partial fs/glob "."))
+                        (map (comp (juxt set-index file->viewer)
+                                   #_safe-build
+                                   str)))
+                       paths))
         out-html (str out-path fs/file-separator "index.html")]
     (when-not (fs/exists? (fs/parent out-html))
       (fs/create-dirs (fs/parent out-html)))
