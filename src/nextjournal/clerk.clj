@@ -291,7 +291,10 @@
         (map #(str "notebooks/" % ".clj")))
 
    ;; md notebooks
-   ["notebooks/markdown.md"]))
+   ["index.md"
+    "notebooks/markdown.md"]))
+
+(defn set-index [path] (if (re-matches #"^index\.(clj|md)$" path) :index path))
 
 (defn build-static-app!
   "Builds a static html app of the notebooks at `paths`."
@@ -299,7 +302,13 @@
     :or {paths clerk-docs
          out-path "public/build"
          live-js? view/live-js?}}]
-  (let [docs (into {} (map (fn [path] {path (file->viewer path)}) paths))
+  (let [docs (-> {}
+                 (into (map (juxt set-index file->viewer)) paths)
+                 ;; NOTE: As an alternative build index as notebook
+                 #_
+                 (cond->
+                   (not (has-index? paths))
+                   (assoc :index (default-index-notebook paths)) ))
         out-html (str out-path fs/file-separator "index.html")]
     (when-not (fs/exists? (fs/parent out-html))
       (fs/create-dirs (fs/parent out-html)))
