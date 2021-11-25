@@ -138,13 +138,13 @@
 (defn +eval-results
   "Assocs a :result to code nodes, either to the node itselfs or at the path of inline markdown expressions."
   [results-last-run vars->hash doc]
-  (let [doc (reduce-kv (fn [doc {:as node :keys [type text doc-path]} idx]
+  (let [doc (reduce (fn [doc [idx {:keys [type text doc-path]}]]
                          (cond-> doc
                            (= :code type)
                            (assoc-in (if doc-path (concat doc-path [:result]) [idx :result])
                                      (read+eval-cached results-last-run vars->hash text))))
                        doc
-                       (zipmap doc (range)))]
+                       (map-indexed (fn [i n] [i n]) doc))]
     (with-meta doc (-> doc blob->result (assoc :ns *ns*)))))
 
 #_(let [doc (+eval-results {} {} [{:type :markdown :text "# Hi"} {:type :code :text "[1]"} {:type :code :text "(+ 39 3)"}])
