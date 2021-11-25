@@ -19,7 +19,7 @@ Nextjournal Markdown library is able to ingest a markdown string
 (def markdown-input (slurp "https://daringfireball.net/projects/markdown/syntax.text"))
 ```
 
-and parse it into a nested clojure structure 
+and parse it into a nested clojure structure
 
 ```clojure
 (def parsed (md/parse markdown-input))
@@ -31,20 +31,20 @@ which you can manipulate with your favourite clojure functions
 (def sliced (update parsed :content #(take 8 %)))
 ```
 
-and render back to hiccup with customisable elements. 
+and render back to hiccup with customisable elements.
 
 At present, Clerk will split top level forms which are grouped togetehr under the same cell, this is to guarantee that Clerk's dependency analysys among forms will still effectively avoid needless recomputations when code changes.
 
 ```clojure
-(def renderers 
-  (assoc md.transform/default-hiccup-renderers 
+(def renderers
+  (assoc md.transform/default-hiccup-renderers
         :doc (partial md.transform/into-markup [:div.viewer-markdown])
         :ruler (fn [_ _]
                  [:hr.mt-1.mb-1
-                  {:style {:border "10px solid magenta" 
+                  {:style {:border "10px solid magenta"
                            :border-radius "10px"}}])))
 
-(def hiccup 
+(def hiccup
   (md.transform/->hiccup renderers sliced))
 ```
 
@@ -56,6 +56,4 @@ and finally render via Clerk's helper.
 
 ## Appendix
 
-Don't forget the closing slice 🍕 of dough 
-- a `(+ 1 2)` ding
-- for `(clerk/html [:em.red "magic"])` fun
+Don't forget the closing slice 🍕 of markdown.
