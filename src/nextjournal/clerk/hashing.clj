@@ -14,6 +14,8 @@
             [multihash.digest :as digest]
             [rewrite-clj.node :as n]
             [rewrite-clj.parser :as p]
+            [nextjournal.markdown :as markdown]
+            [nextjournal.markdown.transform :as markdown.transform]
             [weavejester.dependency :as dep]))
 
 (defn var-name
@@ -71,18 +73,6 @@
 (defn remove-leading-semicolons [s]
   (str/replace s #"^[;]+" ""))
 
-
-
-(defn ->visibility [form]
-  ;; TODO: validate values
-  (when-let [v (-> form meta :nextjournal.clerk/visibility)]
-    (cond-> v (not (set? v)) hash-set)))
-
-#_(->visibility '(foo :bar))
-#_(->visibility (quote ^{:nextjournal.clerk/visibility :fold} (ns foo)))
-#_(->visibility (quote ^{:nextjournal.clerk/visibility #{:hide-ns :fold}} (ns foo)))
-
-
 (defn auto-resolves [ns]
   (as-> (ns-aliases ns) $
     (assoc $ :current (ns-name *ns*))
@@ -90,7 +80,6 @@
             (map ns-name (vals $)))))
 
 #_(auto-resolves (find-ns 'rule-30))
-
 
 (defn read-string [s]
   (edamame/parse-string s {:all true
@@ -101,33 +90,78 @@
 
 #_(read-string "(ns rule-30 (:require [nextjournal.clerk.viewer :as v]))")
 
+(defn ->visibility [form]
+  ;; TODO: validate values
+  (when-let [v (-> form meta :nextjournal.clerk/visibility)]
+    (cond-> v (not (set? v)) hash-set)))
+
+#_(->visibility '(foo :bar))
+#_(->visibility (quote ^{:nextjournal.clerk/visibility :fold} (ns foo)))
+#_(->visibility (quote ^{:nextjournal.clerk/visibility #{:hide-ns :fold}} (ns foo)))
+
+(def no-junk #{:deref :map :meta :list :quote :reader-macro :set :token :var :vector})
+(defn parse-clojure-file [{:as _opts :keys [markdown?]} file]
+  (loop [{:as state :keys [doc nodes visibility]} {:nodes (:children (p/parse-file-all file))
+                                                   :doc []}]
+    (if-let [node (first nodes)]
+      (recur (cond
+               (no-junk (n/tag node))
+               (cond-> (-> state
+                           (update :nodes rest)
+                           (update :doc (fnil conj []) {:type :code :text (n/string node)}))
+
+                 (and markdown? (not visibility))
+                 (assoc :visibility (->visibility (read-string (n/string node)))))
+
+               (and markdown? (n/comment? node))
+               (-> state
+                   (assoc :nodes (drop-while n/comment? nodes))
+                   (update :doc conj {:type :markdown
+                                      :doc (markdown/parse (apply str (map (comp remove-leading-semicolons n/string)
+                                                                           (take-while n/comment? nodes))))}))
+               :else
+               (update state :nodes rest)))
+      (select-keys state [:doc :visibility]))))
+
+(defn code-cell? [{:as node :keys [type]}]
+  ;; TODO: assign different types to fenced vs indented code blocks
+  (and (= :code type) (contains? node :info)))
+
+(defn parse-markdown-file [file]
+  (loop [{:as state :keys [doc nodes] ::keys [md-slice]} {:doc [] ::md-slice [] :nodes (:content (markdown/parse (slurp file)))}]
+    (if-some [node (first nodes)]
+      (recur
+       (if (code-cell? node)
+         (cond-> state
+           (seq md-slice)
+           (-> (update :doc conj {:type :markdown :doc {:type :doc :content md-slice}})
+               (assoc ::md-slice []))
+
+           :always
+           (-> (update :doc #(let [form-nodes (-> (markdown.transform/->text node) str/trim p/parse-string-all :children
+                                                  (->> (filter (comp no-junk n/tag))))
+                                   last (dec (count form-nodes))]
+                               (into % (map-indexed (fn [i n] (cond-> {:type :code :text (n/string n)}
+                                                                (not= last i) (assoc :skip-result? true)
+                                                                (not= 0 i)    (assoc :glue? true))))
+                                     form-nodes)))
+               (update :nodes rest)))
+
+         (-> state (update ::md-slice conj node) (update :nodes rest))))
+
+      {:doc (cond-> doc
+              (seq md-slice)
+              (conj {:type :markdown :doc {:type :doc :content md-slice}}))
+       :visibility nil}))) ;; TODO: fix visibility for the markdown case
+
 (defn parse-file
-  ([file]
-   (parse-file {} file))
-  ([{:as _opts :keys [markdown?]} file]
-   (loop [{:as state :keys [doc nodes visibility]} {:nodes (:children (p/parse-file-all file))
-                                                    :doc []}]
-     (if-let [node (first nodes)]
-       (recur (cond
-                (#{:deref :map :meta :list :quote :reader-macro :set :token :var :vector} (n/tag node))
-                (cond-> (-> state
-                            (update :nodes rest)
-                            (update :doc (fnil conj []) {:type :code :text (n/string node)}))
+  ([file] (parse-file {} file))
+  ([opts file] (if (str/ends-with? file ".md")
+                 (parse-markdown-file file)
+                 (parse-clojure-file opts file))))
 
-                  (and markdown? (not visibility))
-                  (assoc :visibility (->visibility (read-string (n/string node)))))
-
-                (and markdown? (n/comment? node))
-                (-> state
-                    (assoc :nodes (drop-while n/comment? nodes))
-                    (update :doc conj {:type :markdown :text (apply str (map (comp remove-leading-semicolons n/string)
-                                                                             (take-while n/comment? nodes)))}))
-                :else
-                (update state :nodes rest)))
-       (select-keys state [:doc :visibility])))))
-
-#_(parse-file {:markdown? true} "notebooks/visibility.clj")
 #_(parse-file "notebooks/elements.clj")
+#_(parse-file "notebooks/markdown.md")
 #_(parse-file {:markdown? true} "notebooks/rule_30.clj")
 #_(parse-file "notebooks/src/demo/lib.cljc")
 

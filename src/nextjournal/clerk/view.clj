@@ -76,11 +76,11 @@
   ([{:keys [inline-results?] :or {inline-results? false}} doc]
    (let [{:keys [ns]} (meta doc)]
      (cond-> (into []
-                   (mapcat (fn [{:as x :keys [type text result]}]
+                   (mapcat (fn [{:as x :keys [type text result doc skip-result?]}]
                              (case type
                                :markdown [(v/md text)]
                                :code (let [{:nextjournal.clerk/keys [visibility]} result
-                                           result? (and (contains? x :result) (not (visibility :hide-ns)))
+                                           result? (and (contains? x :result) (not (visibility :hide-ns)) (not skip-result?))
                                            fold? (visibility :fold)
                                            code? (or (visibility :show)
                                                      fold?)]
