@@ -128,7 +128,7 @@
                                                                         :text (markdown.transform/->text node)
                                                                         :doc-path (concat pprefix path)
                                                                         :skip-result? true
-                                                                        :cell-visible? false})
+                                                                        :hidden? true})
                                                  acc))
                                              (-> state
                                                  (assoc ::md-slice [])

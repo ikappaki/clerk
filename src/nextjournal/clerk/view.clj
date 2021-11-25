@@ -71,9 +71,10 @@
 
 #_(nextjournal.clerk/show! "notebooks/hello.clj")
 
-(defn describe-inline-result [mddoc ns]
+(defn describe-inline-result [mddoc ns lazy-load?]
   (h/doc-walk :result
-              (fn [node _] (-> node (dissoc :result) (merge (->result ns (:result node) false)))) ;; TODO: adjust `lazy-load?` options
+              (fn [node _]
+                (-> node (dissoc :result) (merge (->result ns (:result node) lazy-load?))))
               mddoc))
 
 (defn doc->viewer
@@ -81,10 +82,12 @@
   ([{:keys [inline-results?] :or {inline-results? false}} doc]
    (let [{:keys [ns]} (meta doc)]
      (cond-> (into []
-                   (mapcat (fn [{:as x :keys [type text result doc skip-result?]}]
+                   (mapcat (fn [{:as x :keys [type text result doc skip-result? hidden?]}]
                              (case type
-                               :markdown [(v/md (describe-inline-result doc ns))]
-                               :code (cond-> [(merge (v/code text) (select-keys x [:glue?]))]
+                               :markdown [(v/md (describe-inline-result doc ns (not inline-results?)))]
+                               :code (cond-> []
+                                       (not hidden?)
+                                       (conj (merge (v/code text) (select-keys x [:glue?])))
                                        (and (not skip-result?) (contains? x :result))
                                        (conj (cond
                                                (v/registration? (:result result))
