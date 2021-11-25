@@ -99,33 +99,43 @@
   ;; TODO: assign different types to fenced vs indented code blocks
   (and (= :code type) (contains? node :info)))
 
-(defn doc-walk [p f {:as node :keys [content]}]
-  ;; TODO: move to viewers/markdown repo
-  (cond-> node
-    (p node) f
-    (seq content) (update :content #(into [] (map (partial doc-walk p f)) %))))
+(defn doc-walk
+  "Takes a predicate on node, an arity-2 function of [node path] and a markdown node, walks node applying f to all nodes
+  that pass p and to the path at node from document root."
+  ([p f node] (doc-walk p f [] node))
+  ([p f path {:as node :keys [content]}]
+   (cond-> node
+     (p node) (f path)
+     (seq content) (update :content
+                           #(into []
+                                  (map-indexed (fn [i n] (doc-walk p f (conj path :content i) n)))
+                                  %)))))
 
 (defn doc-reduce [rf init {:as node :keys [content]}]
   (reduce (partial doc-reduce rf) (rf init node) content))
 
-(defn assign-refs [doc]
-  (doc-walk (comp #{:monospace} :type)
-            #(assoc % :ref-id (java.util.UUID/randomUUID))
-            doc))
-
 (defn parse-markdown-file [file]
-  (let [apply-markdown-slice (fn [{:as state ::keys [md-slice]}]
-                               (let [mddoc (when (seq md-slice) {:type :doc :content md-slice})]
-                                 (doc-reduce (fn [acc {:as node :keys [ref-id]}]
-                                               (if ref-id
-                                                 (update acc :doc conj {:type :code :text (markdown.transform/->text node) :ref-id ref-id})
+  (let [assign-paths (fn [mddoc] ;; assign paths to monospace nodes
+                       (doc-walk (comp #{:monospace} :type)
+                                 (fn [n p] (assoc n :path p))
+                                 mddoc))
+        apply-markdown-slice (fn [{:as state :keys [doc] ::keys [md-slice]}]
+                               (let [mddoc (when (seq md-slice) (assign-paths {:type :doc :content md-slice}))
+                                     pprefix (when mddoc [(count doc) :doc])]
+                                 (doc-reduce (fn [acc node]
+                                               (if-some [path (:path node)]
+                                                 (update acc :doc conj {:type :code
+                                                                        :text (markdown.transform/->text node)
+                                                                        :doc-path (concat pprefix path)
+                                                                        :skip-result? true
+                                                                        :cell-visible? false})
                                                  acc))
                                              (-> state
                                                  (assoc ::md-slice [])
                                                  (cond-> mddoc (update :doc conj {:type :markdown :doc mddoc})))
                                              mddoc)))]
     (loop [{:as state :keys [doc nodes] ::keys [md-slice]}
-           {:doc [] ::md-slice [] :nodes (:content (assign-refs (markdown/parse (slurp file))))}]
+           {:doc [] ::md-slice [] :nodes (:content (markdown/parse (slurp file)))}]
       (if-some [node (first nodes)]
         (recur
          (if (code-cell? node)

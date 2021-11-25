@@ -1,5 +1,6 @@
 (ns nextjournal.clerk.view
   (:require [nextjournal.clerk.viewer :as v]
+            [nextjournal.clerk.hashing :as h]
             [hiccup.page :as hiccup]
             [clojure.pprint :as pprint]
             [clojure.string :as str]
@@ -59,7 +60,6 @@
 (defn ->result [ns {:keys [result blob-id ref-id]} lazy-load?]
   (let [described-result (v/describe result {:viewers (v/get-viewers ns (v/viewers result))})]
     (merge {:nextjournal/viewer :clerk/result
-            :nextjournal/ref-id ref-id
             :nextjournal/value (cond-> (try {:nextjournal/edn (->edn described-result)}
                                             (catch Throwable _e
                                               {:nextjournal/string (pr-str result)}))
@@ -71,14 +71,19 @@
 
 #_(nextjournal.clerk/show! "notebooks/hello.clj")
 
+(defn describe-inline-result [mddoc ns]
+  (h/doc-walk :result
+              (fn [node _] (-> node (dissoc :result) (merge (->result ns (:result node) false)))) ;; TODO: adjust `lazy-load?` options
+              mddoc))
+
 (defn doc->viewer
   ([doc] (doc->viewer {} doc))
   ([{:keys [inline-results?] :or {inline-results? false}} doc]
    (let [{:keys [ns]} (meta doc)]
      (cond-> (into []
-                   (mapcat (fn [{:as x :keys [type text result ref-id doc skip-result?]}]
+                   (mapcat (fn [{:as x :keys [type text result doc skip-result?]}]
                              (case type
-                               :markdown [(v/md doc)]
+                               :markdown [(v/md (describe-inline-result doc ns))]
                                :code (cond-> [(merge (v/code text) (select-keys x [:glue?]))]
                                        (and (not skip-result?) (contains? x :result))
                                        (conj (cond
@@ -86,9 +91,7 @@
                                                (:result result)
 
                                                :else
-                                               (->result ns
-                                                         (cond-> result ref-id (assoc :ref-id ref-id))
-                                                         (and (not inline-results?)
+                                               (->result ns result (and (not inline-results?)
                                                                         (contains? result :blob-id)))))))))
                    doc)
        true v/notebook
