@@ -298,25 +298,38 @@
   (try [(rewrite-index-path path) (file->viewer path)]
        (catch Throwable e (println "Error building " path " " (ex-message e)))))
 
+(defn make-parent-dirs! [f]
+  (when-not (fs/exists? (fs/parent f))
+    (fs/create-dirs (fs/parent f))))
+
 (defn build-static-app!
   "Builds a static html app of the notebooks at `paths`."
-  [{:keys [paths out-path live-js?]
+  [{:keys [paths out-path live-js? bundle?]
     :or {paths clerk-docs
          out-path "public/build"
-         live-js? view/live-js?}}]
+         live-js? view/live-js?
+         bundle? true}
+    :as opts}]
   (let [docs (-> {}
                  (into (comp
                         (mapcat (partial fs/glob "."))
-                        (map (comp (juxt rewrite-index-path file->viewer)
+                        (map (comp (juxt (if bundle? rewrite-index-path identity)
+                                         file->viewer)
                                    str)))
-                       paths))
-        out-html (str out-path fs/file-separator "index.html")]
-    (when-not (fs/exists? (fs/parent out-html))
-      (fs/create-dirs (fs/parent out-html)))
-    (spit out-html (view/->static-app {:live-js? live-js?} docs))
+                       paths))]
+    (if bundle?
+      (let [out-html (str out-path fs/file-separator "index.html")]
+        (make-parent-dirs! out-html)
+        (spit out-html (view/->static-app opts docs)))
+
+      (doseq [[path doc] docs]
+        (let [out-html (str out-path fs/file-separator path ".html")]
+          (make-parent-dirs! out-html)
+          (spit out-html (view/->static-app opts {:doc doc})))))
+
     (if (and live-js? (str/starts-with? out-path "public/"))
       (browse/browse-url (str "http://localhost:7778/" (str/replace out-path "public/" "")))
-      (browse/browse-url out-html))))
+      (browse/browse-url (str out-path fs/file-separator "index.html")))))
 
 #_(build-static-app! {})
 #_(build-static-app! {:live-js? false})

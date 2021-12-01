@@ -164,7 +164,7 @@
 (def resource->static-url
   {"/css/app.css" "https://storage.googleapis.com/nextjournal-cas-eu/data/8VxQBDwk3cvr1bt8YVL5m6bJGrFEmzrSbCrH1roypLjJr4AbbteCKh9Y6gQVYexdY85QA2HG5nQFLWpRp69zFSPDJ9"
    "/css/viewer.css" "https://storage.googleapis.com/nextjournal-cas-eu/data/8VvykE47cdahchdt8fxwHyYwJ7YSmEFcMSyqf4UNs61izpuF1xXpKA4HeZQctDkkU11B5iLVSBjpCQrk5f5mWXS9xv"
-   "/js/viewer.js" "https://storage.googleapis.com/nextjournal-cas-eu/data/8VtkptMsVpLSwXojAKinVmhTk4kfg7myXatMpJd3qQ5ziya11udwhi4fzqduFZehDETuPGuWRPbVLLS5XUbX5EYnZ3"})
+   "/js/viewer.js" "https://storage.googleapis.com/nextjournal-cas-eu/data/8VvBuRPFR9AR1vYTDjvWMuHWcs1Rg5KnfA6amZGcZpgwVovnAmLCz5W9j6ZQHM9dgNdpo4S7APpLMJkYiAs5xMYKtB"})
 
 (defn ->html [{:keys [conn-ws? live-js?] :or {conn-ws? true live-js? live-js?}} doc]
   (hiccup/html5
@@ -186,8 +186,7 @@ viewer.mount(document.getElementById('clerk'))\n"
 ws.onmessage = msg => viewer.reset_doc(viewer.read_string(msg.data))
 window.ws_send = msg => ws.send(msg)")]]))
 
-
-(defn ->static-app [{:keys [live-js?] :or {live-js? live-js?}} docs]
+(defn ->static-app [{:keys [bundle? live-js?] :or {live-js? live-js?}} docs]
   (hiccup/html5
    [:head
     [:meta {:charset "UTF-8"}]
@@ -198,10 +197,12 @@ window.ws_send = msg => ws.send(msg)")]]))
     (hiccup/include-js  (cond-> "/js/viewer.js"   (not live-js?) resource->static-url))]
    [:body
     [:div#clerk-static-app]
-    [:script "let viewer = nextjournal.clerk.sci_viewer
+    [:script (str "let viewer = nextjournal.clerk.sci_viewer
 let app = nextjournal.clerk.static_app
-let docs = viewer.read_string(" (-> docs ->edn pr-str) ")
-app.init(docs)\n"]]))
+let docs = viewer.read_string(" (-> docs ->edn pr-str) ")\n"
+                  (if bundle?
+                    "app.init(docs)\n"
+                    "app.page(docs)\n"))]]))
 
 (defn doc->html [doc]
   (->html {} (doc->viewer {} doc)))

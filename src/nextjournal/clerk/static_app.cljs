@@ -67,3 +67,12 @@
   (reset! path->doc docs)
   (rfe/start! router #(reset! match %1) {:use-fragment true})
   (mount))
+
+(defn ^:export page
+  "Single paged version of init. `docs` is `{:doc current-doc}`."
+  [docs]
+  (reset! path->doc docs)
+  (reset! match {:data {:view show
+                        :path :doc
+                        :bundle? false}})
+  (mount))
