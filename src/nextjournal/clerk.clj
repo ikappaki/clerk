@@ -267,24 +267,36 @@
 ;; static builds
 
 (def clerk-docs
-  (into ["notebooks/markdown.md"]
-        (map #(str "notebooks/" % ".clj"))
-        ["hello"
-         "how_clerk_works"
-         "onwards"
-         "pagination"
-         "paren_soup"
-         #_"readme" ;; TODO: add back when we have Clojure cells in md
-         "rule_30"
-         "visibility"
-         "viewer_api"
-         "viewers/html"
-         "viewers/image"
-         "viewers/markdown"
-         "viewers/plotly"
-         "viewers/table"
-         "viewers/tex"
-         "viewers/vega"]))
+  (-> []
+      ;; clojure notebooks
+      (into (map #(str "notebooks/" % ".clj"))
+            ["hello"
+             "how_clerk_works"
+             "onwards"
+             "pagination"
+             "paren_soup"
+             #_"readme" ;; TODO: add back when we have Clojure cells in md
+             "rule_30"
+             "visibility"
+             "viewer_api"])
+
+      ;; viewers notebooks
+      (into ["notebooks/viewers/*.clj"])
+
+      ;; markdown notebooks
+      (into ["index.md"
+             "notebooks/*.md"])))
+
+(defn rewrite-index-path [path]
+  (if-some [[_ pref] (re-matches #"^(.*?)(?:\/)?index\.(clj|md)$" path)]
+    pref
+    path))
+
+(defn safe-build
+  "Same as `(juxt rewrite-index-path file->viewer)` but catches and logs an error while building notebook at `path`."
+  [path]
+  (try [(rewrite-index-path path) (file->viewer path)]
+       (catch Throwable e (println "Error building " path " " (ex-message e)))))
 
 (defn build-static-app!
   "Builds a static html app of the notebooks at `paths`."
@@ -292,7 +304,12 @@
     :or {paths clerk-docs
          out-path "public/build"
          live-js? view/live-js?}}]
-  (let [docs (into {} (map (fn [path] {path (file->viewer path)}) paths))
+  (let [docs (-> {}
+                 (into (comp
+                        (mapcat (partial fs/glob "."))
+                        (map (comp (juxt rewrite-index-path file->viewer)
+                                   str)))
+                       paths))
         out-html (str out-path fs/file-separator "index.html")]
     (when-not (fs/exists? (fs/parent out-html))
       (fs/create-dirs (fs/parent out-html)))
