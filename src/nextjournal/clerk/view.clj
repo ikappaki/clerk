@@ -186,11 +186,12 @@ viewer.mount(document.getElementById('clerk'))\n"
 ws.onmessage = msg => viewer.reset_doc(viewer.read_string(msg.data))
 window.ws_send = msg => ws.send(msg)")]]))
 
-(defn ->static-app [{:keys [bundle? live-js?] :or {live-js? live-js?}} docs]
+(defn ->static-app [{:keys [bundle? live-js? base-url] :or {live-js? live-js?}} docs]
   (hiccup/html5
    [:head
     [:meta {:charset "UTF-8"}]
     [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
+    (when base-url [:base {:href base-url}])
     (hiccup/include-css "https://cdn.jsdelivr.net/npm/katex@0.13.13/dist/katex.min.css")
     (hiccup/include-css (cond-> "/css/app.css"    (not live-js?) resource->static-url))
     (hiccup/include-css (cond-> "/css/viewer.css" (not live-js?) resource->static-url))
