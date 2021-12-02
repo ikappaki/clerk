@@ -323,7 +323,7 @@
         (spit out-html (view/->static-app opts docs)))
 
       (doseq [[path doc] docs]
-        (let [out-html (str out-path fs/file-separator path ".html")]
+        (let [out-html (str out-path fs/file-separator (str/replace path #"(.clj|.md)" ".html"))]
           (make-parent-dirs! out-html)
           (spit out-html (view/->static-app opts {:doc doc})))))
 
