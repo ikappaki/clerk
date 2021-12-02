@@ -16,7 +16,11 @@
      (when (or spa-page? (and (= :doc path) (not= "index.html" (:path @path->doc))))
        [:div.flex.flex-col.items-center
         [:div.mt-8.flex.items-center.text-xs.w-full.max-w-prose.px-8.sans-serif.text-gray-400
-         [:a.hover:text-indigo-500 {:href (if spa-page? (rfe/href ::index) "/")} "Back to index"]
+         [:a.hover:text-indigo-500
+          {:href (or (and spa-page? (rfe/href ::index))
+                     (.-baseURI js/document)
+                     "/")}
+          "Back to index"]
          [:span.mx-1 "/"]
          [:a.hover:text-indigo-500 {:href "https://github.com/nextjournal/clerk"} "Generated with Clerk."]]]))
    [sci-viewer/root]])
