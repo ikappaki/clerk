@@ -323,9 +323,10 @@
         (spit out-html (view/->static-app opts docs)))
 
       (doseq [[path doc] docs]
-        (let [out-html (str out-path fs/file-separator (str/replace path #"(.clj|.md)" ".html"))]
+        (let [html-path (str/replace path #"(.clj|.md)" ".html")
+              out-html (str out-path fs/file-separator html-path)]
           (make-parent-dirs! out-html)
-          (spit out-html (view/->static-app opts {:doc doc})))))
+          (spit out-html (view/->static-app opts {:doc doc :path html-path})))))
 
     (if (and live-js? (str/starts-with? out-path "public/"))
       (browse/browse-url (str "http://localhost:7778/" (str/replace out-path "public/" "")))
