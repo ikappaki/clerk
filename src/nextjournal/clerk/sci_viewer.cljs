@@ -269,6 +269,12 @@
   [:svg.h-4.w-4 {:xmlns "http://www.w3.org/2000/svg" :viewBox "0 0 20 20" :fill "currentColor"}
    [:path {:fill-rule "evenodd" :d "M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" :clip-rule "evenodd"}]])
 
+(def copy-icon
+  [:svg#Layer_1 {:version "1.1" :xmlns "http://www.w3.org/2000/svg" :xmlns:xlink "http://www.w3.org/1999/xlink" :x "0px" :y "0px" :viewBox "0 0 115.77 122.88"  :xml:space "preserve"}
+   [:style {:type "text/css"}
+    ".st0{fill-rule:evenodd;clip-rule:evenodd;}"]
+   [:g [:path.st0 {:d "M89.62,13.96v7.73h12.19h0.01v0.02c3.85,0.01,7.34,1.57,9.86,4.1c2.5,2.51,4.06,5.98,4.07,9.82h0.02v0.02 v73.27v0.01h-0.02c-0.01,3.84-1.57,7.33-4.1,9.86c-2.51,2.5-5.98,4.06-9.82,4.07v0.02h-0.02h-61.7H40.1v-0.02 c-3.84-0.01-7.34-1.57-9.86-4.1c-2.5-2.51-4.06-5.98-4.07-9.82h-0.02v-0.02V92.51H13.96h-0.01v-0.02c-3.84-0.01-7.34-1.57-9.86-4.1 c-2.5-2.51-4.06-5.98-4.07-9.82H0v-0.02V13.96v-0.01h0.02c0.01-3.85,1.58-7.34,4.1-9.86c2.51-2.5,5.98-4.06,9.82-4.07V0h0.02h61.7 h0.01v0.02c3.85,0.01,7.34,1.57,9.86,4.1c2.5,2.51,4.06,5.98,4.07,9.82h0.02V13.96L89.62,13.96z M79.04,21.69v-7.73v-0.02h0.02 c0-0.91-0.39-1.75-1.01-2.37c-0.61-0.61-1.46-1-2.37-1v0.02h-0.01h-61.7h-0.02v-0.02c-0.91,0-1.75,0.39-2.37,1.01 c-0.61,0.61-1,1.46-1,2.37h0.02v0.01v64.59v0.02h-0.02c0,0.91,0.39,1.75,1.01,2.37c0.61,0.61,1.46,1,2.37,1v-0.02h0.01h12.19V35.65 v-0.01h0.02c0.01-3.85,1.58-7.34,4.1-9.86c2.51-2.5,5.98-4.06,9.82-4.07v-0.02h0.02H79.04L79.04,21.69z M105.18,108.92V35.65v-0.02 h0.02c0-0.91-0.39-1.75-1.01-2.37c-0.61-0.61-1.46-1-2.37-1v0.02h-0.01h-61.7h-0.02v-0.02c-0.91,0-1.75,0.39-2.37,1.01 c-0.61,0.61-1,1.46-1,2.37h0.02v0.01v73.27v0.02h-0.02c0,0.91,0.39,1.75,1.01,2.37c0.61,0.61,1.46,1,2.37,1v-0.02h0.01h61.7h0.02 v0.02c0.91,0,1.75-0.39,2.37-1.01c0.61-0.61,1-1.46,1-2.37h-0.02V108.92L105.18,108.92z"}]]])
+
 (defn table-error [[data]]
   ;; currently boxing the value in a vector to retain the type info
   ;; TODO: find a better way to do this
@@ -297,55 +303,72 @@
 
 (defn table-viewer [data opts]
   (r/with-let [!sort (r/atom nil)]
-    (let [{:as srt :keys [sort-index sort-key sort-order]} @!sort]
+    (let [{:as srt :keys [sort-index sort-key sort-order]} @!sort
+          table-id (random-uuid)]
       (html
        (let [{:keys [head rows]} (cond->> data sort-key (sort-data srt))
              num-cols (-> rows viewer/value first viewer/value count)]
-         [:table.text-xs.sans-serif
-          (when head
-            [:thead.border-b.border-gray-300
-             (into [:tr]
-                   (map-indexed (fn [i k]
-                                  [:th.relative.pl-6.pr-2.py-1.align-bottom.font-medium
-                                   {:class (if (number? (get-in rows [0 i])) "text-right" "text-left")
-                                    #_#_#_#_
-                                    :style {:cursor "ns-resize"}
-                                    :on-click #(sort! !sort i k)
-                                    :title (if (or (string? k) (keyword? k)) (name k) (str k))}
-                                   [:div.inline-flex
-                                    ;; Truncate to available col width without growing the table
-                                    [:div.table.table-fixed.w-full.flex-auto
-                                     {:style {:margin-left -12}}
-                                     [:div.truncate
-                                      [:span.inline-flex.justify-center.items-center.relative
-                                       {:style {:font-size 20 :width 10 :height 10 :bottom -2 :margin-right 2}}
-                                       (when (= sort-key k)
-                                         (if (= sort-order :asc) "▴" "▾"))]
-                                      (if (or (string? k) (keyword? k)) (name k) [inspect k])]]]]) head))])
-          (into [:tbody]
-                (map-indexed (fn [i row]
-                               (if (= :elision (viewer/viewer row))
-                                 (let [{:as fetch-opts :keys [remaining unbounded?]} (viewer/value row)]
-                                   [view-context/consume :fetch-fn
-                                    (fn [fetch-fn]
-                                      [:tr.border-t
-                                       [:td.text-center.py-1
-                                        {:col-span num-cols
-                                         :class (if (fn? fetch-fn)
-                                                  "bg-indigo-50 hover:bg-indigo-100 cursor-pointer"
-                                                  "text-gray-400")
-                                         :on-click #(when (fn? fetch-fn)
-                                                      (fetch-fn fetch-opts))}
-                                        remaining (when unbounded? "+") (if (fn? fetch-fn) " more…" " more elided")]])])
-                                 (let [row (viewer/value row)]
-                                   (into
-                                    [:tr.hover:bg-gray-200
-                                     {:class (if (even? i) "bg-opacity-5 bg-black" "bg-white")}]
-                                    (map-indexed (fn [j d]
-                                                   [:td.pl-6.pr-2.py-1
-                                                    {:class [(when (number? d) "text-right")
-                                                             (when (= j sort-index) "bg-opacity-5 bg-black")]}
-                                                    [inspect (update opts :path conj i j) d]]) row))))) (viewer/value rows)))])))))
+
+         [:<>
+          [:div.has-tooltip.relative
+           [:div.tooltip.top-0.right-0.h-6.w-6
+            {:on-click (fn [_e]
+                         (let [range (js/document.createRange)
+                               ct (js/document.getElementById table-id)
+                               ]
+                           (println :button ct)
+                           (.selectNode range ct)
+                           (-> (js/window.getSelection)
+                               (.addRange range))
+                           (js/document.execCommand "copy")))}
+            copy-icon]
+
+           [:table.text-xs.sans-serif.ha.has-tooltip.relative {:id table-id}
+            (when head
+              [:thead.border-b.border-gray-300
+               (into [:tr]
+                     (map-indexed (fn [i k]
+                                    [:th.relative.pl-6.pr-2.py-1.align-bottom.font-medium
+                                     {:class (if (number? (get-in rows [0 i])) "text-right" "text-left")
+                                      #_#_#_#_
+                                      :style {:cursor "ns-resize"}
+                                      :on-click #(sort! !sort i k)
+                                      :title (if (or (string? k) (keyword? k)) (name k) (str k))}
+                                     [:div.inline-flex
+                                      ;; Truncate to available col width without growing the table
+                                      [:div.table.table-fixed.w-full.flex-auto
+                                       {:style {:margin-left -12}}
+                                       [:div.truncate
+                                        [:span.inline-flex.justify-center.items-center.relative
+                                         {:style {:font-size 20 :width 10 :height 10 :bottom -2 :margin-right 2}}
+                                         (when (= sort-key k)
+                                           (if (= sort-order :asc) "▴" "▾"))]
+                                        (if (or (string? k) (keyword? k)) (name k) [inspect k])]]]]) head))])
+            (into [:tbody
+                   {:on-click #(println :tbody %)}]
+                  (map-indexed (fn [i row]
+                                 (if (= :elision (viewer/viewer row))
+                                   (let [{:as fetch-opts :keys [remaining unbounded?]} (viewer/value row)]
+                                     [view-context/consume :fetch-fn
+                                      (fn [fetch-fn]
+                                        [:tr.border-t
+                                         [:td.text-center.py-1
+                                          {:col-span num-cols
+                                           :class (if (fn? fetch-fn)
+                                                    "bg-indigo-50 hover:bg-indigo-100 cursor-pointer"
+                                                    "text-gray-400")
+                                           :on-click #(when (fn? fetch-fn)
+                                                        (fetch-fn fetch-opts))}
+                                          remaining (when unbounded? "+") (if (fn? fetch-fn) " xmore…" " more elided")]])])
+                                   (let [row (viewer/value row)]
+                                     (into
+                                      [:tr.hover:bg-gray-200
+                                       {:class (if (even? i) "bg-opacity-5 bg-black" "bg-white")}]
+                                      (map-indexed (fn [j d]
+                                                     [:td.pl-6.pr-2.py-1
+                                                      {:class [(when (number? d) "text-right")
+                                                               (when (= j sort-index) "bg-opacity-5 bg-black")]}
+                                                      [inspect (update opts :path conj i j) d]]) row))))) (viewer/value rows)))]]])))))
 
 
 (defn throwable-viewer [{:keys [via trace]}]
